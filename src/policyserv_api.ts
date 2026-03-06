@@ -100,6 +100,10 @@ export interface CommunityConfig {
     forbidden_user_id_filter_patterns?: string[];
     forbidden_user_id_filter_event_types?: string[];
     forbidden_user_id_filter_allowed_users?: string[];
+    frequency_filter_event_types?: string[];
+    frequency_filter_rate_limit?: number; // float, positive to enable
+    mention_frequency_filter_rate_limit?: number; // float, positive to enable
+    mention_frequency_filter_min_plaintext_length?: number; // whole number
 }
 
 export interface ConfigDescription {
@@ -294,6 +298,26 @@ export const ConfigDescriptions: Record<string /* user-friendly name */, ConfigD
         property: "forbidden_user_id_filter_allowed_users",
         description: "User IDs to exempt from the forbidden user patterns (whitelist overrides). Multiple users can be specified by separating them with commas.",
         transformFn: toArray,
+    },
+    "frequency_event_types": {
+        property: "frequency_filter_event_types",
+        description: "The event types the frequency filter applies to. Multiple types can be specified by separating them with commas. Default: `m.room.message,m.sticker,m.reaction`",
+        transformFn: toArray,
+    },
+    "frequency_rate_limit": {
+        property: "frequency_filter_rate_limit",
+        description: "(default `0`) - The events per second (over a 60 second window) to allow before ratelimiting. Set to zero (the default) or negative to disable the filter. Example: `0.25` for ~15 events in a minute (15/60 = 0.25)",
+        transformFn: toNumber,
+    },
+    "mention_frequency_rate_limit": {
+        property: "mention_frequency_filter_rate_limit",
+        description: "The maximum number of mentions per second a user can send before being flagged as spam. Set to 0 to disable. Works like the frequency_rate_limit (events per second over a 60 second window). Mentions are counted per mention and not per message that contains mentions. So 2 mentions in 1 message count as 2.",
+        transformFn: toNumber,
+    },
+    "mention_frequency_min_plaintext_length": {
+        property: "mention_frequency_filter_min_plaintext_length",
+        description: "The minimum length a user's display name must be to count as a mention for the mention frequency filter.",
+        transformFn: toNumber,
     },
 };
 
