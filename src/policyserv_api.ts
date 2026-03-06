@@ -97,6 +97,9 @@ export interface CommunityConfig {
     hma_filter_enabled_banks?: string[];
     link_filter_allowed_url_globs?: string[];
     link_filter_denied_url_globs?: string[];
+    forbidden_user_id_filter_patterns?: string[];
+    forbidden_user_id_filter_event_types?: string[];
+    forbidden_user_id_filter_allowed_users?: string[];
 }
 
 export interface ConfigDescription {
@@ -187,12 +190,12 @@ export const ConfigDescriptions: Record<string /* user-friendly name */, ConfigD
     },
     "allowed_globs_trust_source": {
         property: "untrusted_media_filter_allowed_user_globs",
-        description: "The globs of users to trust. Multiple globs can be specified by separating them with commas.",
+        description: "The globs of users trusted to send media. Multiple globs can be specified by separating them with commas.",
         transformFn: toArray,
     },
     "denied_globs_trust_source": {
         property: "untrusted_media_filter_denied_user_globs",
-        description: "The globs of users to explicitly not trust. Multiple globs can be specified by separating them with commas. Overrides any source which trusts a user.",
+        description: "The globs of users to explicitly not trust sending media. Multiple globs can be specified by separating them with commas. Overrides any source which trusts a user.",
         transformFn: toArray,
     },
     "max_density": {
@@ -275,6 +278,21 @@ export const ConfigDescriptions: Record<string /* user-friendly name */, ConfigD
     "denied_link_globs": {
         property: "link_filter_denied_url_globs",
         description: "The globs of URLs to explicitly not allow in messages. Multiple globs can be specified by separating them with commas. Overrides the allow list of URLs. Example: `*example.org*`",
+        transformFn: toArray,
+    },
+    "forbidden_user_patterns": {
+        property: "forbidden_user_id_filter_patterns",
+        description: "Glob or regex patterns for user IDs to block. Globs use * as wildcard. Wrap regex in /slashes/. Multiple patterns can be specified by separating them with commas. Example: `@*:evil.example,/@spambot[0-9]+:.*/`",
+        transformFn: toArray,
+    },
+    "forbidden_user_event_types": {
+        property: "forbidden_user_id_filter_event_types",
+        description: "Which event types to block from forbidden users. Use * for all events, or list specific types separated by commas. Defaults to all if not set. Example: `*` or `m.room.member,m.room.message,m.reaction`",
+        transformFn: toArray,
+    },
+    "forbidden_user_allowed_users": {
+        property: "forbidden_user_id_filter_allowed_users",
+        description: "User IDs to exempt from the forbidden user patterns (whitelist overrides). Multiple users can be specified by separating them with commas.",
         transformFn: toArray,
     },
 };
