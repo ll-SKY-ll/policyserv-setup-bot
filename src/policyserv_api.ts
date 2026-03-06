@@ -116,6 +116,38 @@ function toArray(val: string): string[] {
     return val.split(",").map(s => s.trim());
 }
 
+function toPatternArray(val: string): string[] {
+    // Split on commas, but not commas inside /regex/ delimiters.
+    // This allows patterns like: @*:evil.example,/@.{50,}:.*/
+    const patterns: string[] = [];
+    let current = "";
+    let insideRegex = false;
+
+    for (let i = 0; i < val.length; i++) {
+        const ch = val[i];
+        if (ch === "/" && !insideRegex && current.trim().length === 0) {
+            insideRegex = true;
+            current += ch;
+        } else if (ch === "/" && insideRegex) {
+            insideRegex = false;
+            current += ch;
+        } else if (ch === "," && !insideRegex) {
+            const trimmed = current.trim();
+            if (trimmed.length > 0) {
+                patterns.push(trimmed);
+            }
+            current = "";
+        } else {
+            current += ch;
+        }
+    }
+    const trimmed = current.trim();
+    if (trimmed.length > 0) {
+        patterns.push(trimmed);
+    }
+    return patterns;
+}
+
 function toNumber(val: string): number {
     const n = Number(val);
     if (isNaN(n)) {
@@ -286,8 +318,8 @@ export const ConfigDescriptions: Record<string /* user-friendly name */, ConfigD
     },
     "forbidden_user_patterns": {
         property: "forbidden_user_id_filter_patterns",
-        description: "Glob or regex patterns for user IDs to block. Globs use * as wildcard. Wrap regex in /slashes/. Multiple patterns can be specified by separating them with commas. Example: `@*:evil.example,/@spambot[0-9]+:.*/`",
-        transformFn: toArray,
+        description: "Glob or regex patterns for user IDs to block. Globs use * as wildcard. Wrap regex in /slashes/. Multiple patterns can be specified by separating them with commas (commas inside /regex/ are safe). Example: `@*:evil.example,/@.{50,}:.*/`",
+        transformFn: toPatternArray,
     },
     "forbidden_user_event_types": {
         property: "forbidden_user_id_filter_event_types",
