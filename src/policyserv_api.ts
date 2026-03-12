@@ -104,6 +104,7 @@ export interface CommunityConfig {
     frequency_filter_rate_limit?: number; // float, positive to enable
     mention_frequency_filter_rate_limit?: number; // float, positive to enable
     mention_frequency_filter_min_plaintext_length?: number; // whole number
+    unsafe_signing_key_filter_enabled?: boolean;
 }
 
 export interface ConfigDescription {
@@ -112,7 +113,7 @@ export interface ConfigDescription {
     transformFn?: (val: string) => CommunityConfig[keyof CommunityConfig];
 }
 
-function toArray(val: string): string[] {
+export function toArray(val: string): string[] {
     return val.split(",").map(s => s.trim());
 }
 
@@ -203,6 +204,26 @@ export const ConfigDescriptions: Record<string /* user-friendly name */, ConfigD
         property: "many_ats_filter_max_ats",
         description: "The maximum number of '@' symbols allowed in a single message. Set to -1 to disable.",
         transformFn: toNumber,
+    },
+    "max_mentions_frequency": {
+        property: "mention_frequency_filter_rate_limit",
+        description: "The maximum number of mentions a user can send per second. 0.25 is approximately 15 mentions per minute. Set to -1 to disable this filter.",
+        transformFn: toNumber,
+    },
+    "min_plaintext_mention_length_frequency": {
+        property: "mention_frequency_filter_min_plaintext_length",
+        description: "The same as `min_plaintext_mention_length`, but for the `max_mentions_frequency` filter. Should be kept in sync with `min_plaintext_mention_length`.",
+        transformFn: toNumber,
+    },
+    "max_message_frequency": {
+        property: "frequency_filter_rate_limit",
+        description: "The maximum number of messages a user can send per second. 0.25 is approximately 15 messages per minute. Set to -1 to disable this filter.",
+        transformFn: toNumber,
+    },
+    "message_frequency_event_types": {
+        property: "frequency_filter_event_types",
+        description: "The event types to check for the `max_message_frequency` filter. Multiple types can be specified by separating them with commas. Set to an empty value to disable this filter.",
+        transformFn: toArray,
     },
     "media_types": {
         property: "media_filter_media_types",
@@ -350,6 +371,11 @@ export const ConfigDescriptions: Record<string /* user-friendly name */, ConfigD
         property: "mention_frequency_filter_min_plaintext_length",
         description: "The minimum length a user's display name must be to count as a mention for the mention frequency filter.",
         transformFn: toNumber,
+    },
+    "deny_unsafe_signing_keys": {
+        property: "unsafe_signing_key_filter_enabled",
+        description: "If true, events sent by servers with known-unsafe signing keys will be flagged as spam. Set to false to disable.",
+        transformFn: toBoolean,
     },
 };
 
