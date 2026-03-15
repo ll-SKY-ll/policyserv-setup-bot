@@ -105,6 +105,7 @@ export interface CommunityConfig {
     mention_frequency_filter_rate_limit?: number; // float, positive to enable
     mention_frequency_filter_min_plaintext_length?: number; // whole number
     unsafe_signing_key_filter_enabled?: boolean;
+    local_ai_scanner_enabled?: boolean;
 }
 
 export interface ConfigDescription {
@@ -375,6 +376,11 @@ export const ConfigDescriptions: Record<string /* user-friendly name */, ConfigD
     "deny_unsafe_signing_keys": {
         property: "unsafe_signing_key_filter_enabled",
         description: "If true, events sent by servers with known-unsafe signing keys will be flagged as spam. Set to false to disable.",
+        transformFn: toBoolean,
+    },
+    "local_ai_scanner_enabled": {
+        property: "local_ai_scanner_enabled",
+        description: "If true, media uploaded to rooms will be scanned by a local AI model and flagged as spam if NSFW.",
         transformFn: toBoolean,
     },
 };
