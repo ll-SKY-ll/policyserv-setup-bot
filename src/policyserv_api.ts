@@ -105,7 +105,12 @@ export interface CommunityConfig {
     mention_frequency_filter_rate_limit?: number; // float, positive to enable
     mention_frequency_filter_min_plaintext_length?: number; // whole number
     unsafe_signing_key_filter_enabled?: boolean;
-    local_ai_scanner_enabled?: boolean;
+    local_ai_scanner_configs?: LocalAIScannerConfigEntry[];
+}
+
+export interface LocalAIScannerConfigEntry {
+    type: string;
+    threshold: number;
 }
 
 export interface ConfigDescription {
@@ -167,6 +172,31 @@ function toBoolean(val: string): boolean {
     } else {
         throw new Error(`Invalid boolean: ${val}`);
     }
+}
+
+// Parses "type:threshold,type:threshold" into LocalAIScannerConfigEntry[]
+// e.g. "nsfw:0.65,violence:0.80" -> [{type:"nsfw",threshold:0.65},{type:"violence",threshold:0.80}]
+// Use "none" or empty string to disable all scanners.
+function toScannerConfigs(val: string): LocalAIScannerConfigEntry[] {
+    val = val.trim();
+    if (val === "" || val.toLowerCase() === "none") {
+        return [];
+    }
+    return val.split(",").map(entry => {
+        const parts = entry.trim().split(":");
+        if (parts.length !== 2) {
+            throw new Error(`Invalid scanner config entry "${entry.trim()}". Expected format: type:threshold (e.g. nsfw:0.65)`);
+        }
+        const type = parts[0].trim();
+        const threshold = Number(parts[1].trim());
+        if (!type) {
+            throw new Error(`Empty scanner type in "${entry.trim()}"`);
+        }
+        if (isNaN(threshold) || threshold <= 0 || threshold > 1) {
+            throw new Error(`Invalid threshold "${parts[1].trim()}" for scanner type "${type}". Must be between 0 and 1.`);
+        }
+        return { type, threshold };
+    });
 }
 
 export const ConfigDescriptions: Record<string /* user-friendly name */, ConfigDescription /* actual name and some info */> = {
@@ -378,10 +408,10 @@ export const ConfigDescriptions: Record<string /* user-friendly name */, ConfigD
         description: "If true, events sent by servers with known-unsafe signing keys will be flagged as spam. Set to false to disable.",
         transformFn: toBoolean,
     },
-    "local_ai_scanner_enabled": {
-        property: "local_ai_scanner_enabled",
-        description: "If true, media uploaded to rooms will be scanned by a local AI model and flagged as spam if NSFW.",
-        transformFn: toBoolean,
+    "ai_scanners": {
+        property: "local_ai_scanner_configs",
+        description: "Configure local AI image scanners for this community. Format: `type:threshold` pairs separated by commas. Available types depend on instance configuration (e.g. nsfw, violence). Example: `nsfw:0.65` or `nsfw:0.65,violence:0.80`. Set to `none` to disable all scanners.",
+        transformFn: toScannerConfigs,
     },
 };
 
