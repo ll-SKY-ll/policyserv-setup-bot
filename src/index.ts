@@ -513,12 +513,24 @@ const userLimiter = new RateLimit(userRateLimitWindowMs, userRateLimitMax);
     console.log("Migration complete!");
 })();
 
+function formatConfigValue(val: any): string {
+    if (val == undefined) return undefined;
+    // Handle LocalAIScannerConfigEntry arrays
+    if (Array.isArray(val) && val.length > 0 && typeof val[0] === "object" && "type" in val[0] && "threshold" in val[0]) {
+        return val.map((e: any) => `${e.type}:${e.threshold}`).join(", ");
+    }
+    return `${val}`;
+}
+
 function renderConfigVal(key: keyof CommunityConfig, vals: CommunityConfig, defaults: CommunityConfig): string {
     const [name, description] = Object.entries(ConfigDescriptions).find(([name, desc]) => desc.property === key) ?? [null, null];
     if (!name) {
         return ""; // unrenderable, or at least not something we expect to show to the user
     }
 
+    const formattedVal = formatConfigValue(vals[key]);
+    const formattedDefault = formatConfigValue(defaults[key]);
+
     // Ideally we'd use a table, but not all clients support that :(
-    return `<b><code>${name}</code></b>: ${vals[key] != undefined ? `<code>${escapeHtml(`${vals[key]}`)}</code>` : "use instance default"}<br/>Instance default: ${defaults[key] != undefined ? `<code>${escapeHtml(`${defaults[key]}`)}</code>` : "not set (disabled)"}<br/><i>${description.description}</i><br/><br/>`;
+    return `<b><code>${name}</code></b>: ${formattedVal != undefined ? `<code>${escapeHtml(formattedVal)}</code>` : "use instance default"}<br/>Instance default: ${formattedDefault != undefined ? `<code>${escapeHtml(formattedDefault)}</code>` : "not set (disabled)"}<br/><i>${description.description}</i><br/><br/>`;
 }
