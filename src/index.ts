@@ -24,7 +24,7 @@ const storagePath = process.env.STORAGE_PATH || "bot";
 const policyservBaseUrl = process.env.POLICYSERV_BASE_URL;
 const policyservApiKey = process.env.POLICYSERV_API_KEY;
 const policyservServerName = process.env.POLICYSERV_SERVER_NAME;
-const policyservEventSigningKey = process.env.POLICYSERV_EVENT_SIGNING_KEY; // optional
+const policyservEventSigningKey = process.env.POLICYSERV_EVENT_SIGNING_KEY;
 const appealDirections = process.env.APPEAL_DIRECTIONS || "To appeal this decision, please email abuse@matrix.org";
 const communityRateLimitWindowMs = Number(process.env.COMMUNITY_RATE_LIMIT_WINDOW_MS) || 10 * 60 * 1000; // 10min default
 const communityRateLimitMax = Number(process.env.COMMUNITY_RATE_LIMIT_MAX) || 10;
@@ -48,6 +48,7 @@ requireVariable(safetyTeamRoomId, "SAFETY_TEAM_ROOM_ID");
 requireVariable(policyservBaseUrl, "POLICYSERV_BASE_URL");
 requireVariable(policyservApiKey, "POLICYSERV_API_KEY");
 requireVariable(policyservServerName, "POLICYSERV_SERVER_NAME");
+requireVariable(policyservEventSigningKey, "POLICYSERV_EVENT_SIGNING_KEY");
 
 const policyservApi = new PolicyservApi(policyservBaseUrl, policyservApiKey);
 
@@ -126,21 +127,10 @@ const userLimiter = new RateLimit(userRateLimitWindowMs, userRateLimitMax);
         } else {
             // Try to set the policy server state event ourselves, but warn the community if it went poorly
             try {
-                const content = {
+                await client.sendStateEvent(policyservData["room_id"], "m.room.policy", "", {
                     "via": policyservServerName,
-                };
-                // TODO: Remove unstable and just use `content` instead - https://github.com/matrix-org/policyserv-setup-bot/issues/18
-                const unstableContent = {...content};
-                const stableContent = {...content};
-                if (!!policyservEventSigningKey) {
-                    unstableContent["public_key"] = policyservEventSigningKey;
-                    stableContent["public_keys"] = {"ed25519": policyservEventSigningKey};
-                }
-
-                // Set both unstable and stable.
-                // TODO: Remove unstable - https://github.com/matrix-org/policyserv-setup-bot/issues/18
-                await client.sendStateEvent(policyservData["room_id"], "org.matrix.msc4284.policy", "", unstableContent);
-                await client.sendStateEvent(policyservData["room_id"], "m.room.policy", "", stableContent);
+                    "public_keys": {"ed25519": policyservEventSigningKey},
+                });
             } catch (e) {
                 console.error(e);
                 await client.sendHtmlNotice(policyservData["community_room_id"], `⚠️ The bot was unable to set the policy server configuration in <code>${escapeHtml(policyservData["room_id"])}</code>. It will have to be done manually. The server name for this room should be <code>${policyservServerName}</code>`);
@@ -214,7 +204,8 @@ const userLimiter = new RateLimit(userRateLimitWindowMs, userRateLimitMax);
                         "<li><code>!policyserv set &lt;config key&gt; &lt;value&gt;</code> - Set a configuration value.</li>" +
                         "<li><code>!policyserv add &lt;config key&gt; &lt;value&gt;</code> - Add to a list of values in the configuration.</li>" +
                         "<li><code>!policyserv remove &lt;config key&gt; &lt;value&gt;</code> - Remove from a list of values in the configuration.</li>" +
-                        (roomId === safetyTeamRoomId ? "<li><code>!policserv admin_add &lt;room ID&gt; &lt;community ID&gt;</code> - Point a room ID at the given community ID. Used to restore from data loss." : "") +
+                        (roomId === safetyTeamRoomId ? "<li><code>!policyserv admin_add &lt;room ID&gt; &lt;community ID&gt;</code> - Point a room ID at the given community ID. Used to restore from data loss." : "") +
+                        (roomId === safetyTeamRoomId ? `<li><code>!policyserv admin_update_keys</code> - Updates all joined rooms using ${policyservServerName} as their policy server to use the currently configured key (<code>${policyservEventSigningKey}</code>)` : "") +
                         "</ul>"
                     );
                 } else if (args[0] === "admin_add" && roomId === safetyTeamRoomId) {
@@ -227,6 +218,30 @@ const userLimiter = new RateLimit(userRateLimitWindowMs, userRateLimitMax);
                     const communityId = args[2];
                     storageProvider.storeValue(`room:${communityRoomId}`, JSON.stringify({id: communityId}));
                     await client.unstableApis.addReactionToEvent(roomId, event.event_id, "✅");
+                } else if (args[0] === "admin_update_keys" && roomId === safetyTeamRoomId) {
+                    const rooms = await client.getJoinedRooms();
+                    let errored = false;
+                    for (const inRoomId of rooms) {
+                        try {
+                            const currentPolicy = await client.getRoomStateEventContent(inRoomId, "m.room.policy", "");
+                            if (currentPolicy["via"] === policyservServerName) {
+                                console.log(`Updating policy server key in ${inRoomId}`);
+                                await client.sendHtmlNotice(roomId, `Updating policy server key in <code>${inRoomId}</code> (<a href="https://matrix.to/#/${inRoomId}">${inRoomId}</a>)`);
+                                await client.sendStateEvent(inRoomId, "m.room.policy", "", {
+                                    "via": policyservServerName,
+                                    "public_keys": {"ed25519": policyservEventSigningKey},
+                                });
+                            }
+                        } catch (e) {
+                            if (e.statusCode !== 404) {
+                                console.error(e);
+                                await client.replyNotice(roomId, event, `❌ Error updating ${inRoomId} - ${e.message}`);
+                                errored = true;
+                                break; // the error is probably unrecoverable (timeout, etc), so bail instead of hitting it a bunch of times
+                            } // else it's a 404 so the state event probably just doesn't exist
+                        }
+                    }
+                    if (!errored) await client.unstableApis.addReactionToEvent(roomId, event.event_id, "✅");
                 } else if (args[0] === "community") {
                     if (!!storageProvider.readValue(`room:${roomId}`)) {
                         await client.replyHtmlNotice(roomId, event, "❌ This room is already associated with a community.");
@@ -437,80 +452,6 @@ const userLimiter = new RateLimit(userRateLimitWindowMs, userRateLimitMax);
     });
 
     console.log("Started!");
-
-    // Run a migration to support stable event types alongside unstable in all joined rooms.
-    // TODO: Remove this - https://github.com/matrix-org/policyserv-setup-bot/issues/18
-    if (!policyservEventSigningKey) {
-        console.log("Skipping migration because no policyserv event signing key is set.");
-        return;
-    }
-    try {
-        const data = await client.getAccountData<{done?: boolean}>("org.matrix.policyserv.unstable_to_stable_done");
-        if (data.done) {
-            console.log("Skipping migration because it has already been run.");
-            return;
-        }
-    } catch (e) {
-        if (e.statusCode !== 404) {
-            throw e; // something not-great has happened
-        }
-    }
-    const joinedRoomIds = await client.getJoinedRooms();
-    let noErrors = true;
-    for (const roomId of joinedRoomIds) {
-        try {
-            console.log(`Checking ${roomId} for stable event type`);
-            await client.getRoomStateEventBody(roomId, "m.room.policy", "");
-            console.log(`Skipping ${roomId} because it already has a stable event type`);
-        } catch (e) {
-            if (e.statusCode !== 404) {
-                // Something went wrong, but we don't care about it
-                console.error(e);
-                noErrors = false;
-                continue;
-            }
-
-            // Not set, so try to set it
-            try {
-                console.log(`Checking ${roomId} for unstable event type`);
-                const oldEvent = await client.getRoomStateEventBody(roomId, "org.matrix.msc4284.policy", "");
-                if (oldEvent.sender !== await client.getUserId()) {
-                    // We assume that if someone else set it, then they probably want to have that state copied
-                    console.log(`Skipping ${roomId} because the event wasn't sent by the bot`);
-                    continue;
-                }
-
-                // Convert format to stable
-                const newEventBody = {...oldEvent.content};
-                delete newEventBody["public_key"];
-                newEventBody["public_keys"] = {"ed25519": policyservEventSigningKey}; // don't use key from oldEvent because it might not be there
-
-                // Try to send the new state event
-                console.log(`Migrating ${roomId} from unstable to stable event type`);
-                await client.sendStateEvent(roomId, "m.room.policy", "", newEventBody);
-                console.log(`Migrated ${roomId} from unstable to stable event type`);
-            } catch (e) {
-                if (e.statusCode !== 404) {
-                    // Something went wrong, but we don't care about it
-                    console.error(e);
-                    noErrors = false;
-                } else {
-                    console.log(`Skipping ${roomId} because it doesn't have an unstable event type`);
-                }
-
-                continue;
-            }
-
-            // Sleep for a bit to avoid rate limit errors
-            console.log("Waiting 15s before checking next room");
-            await new Promise(resolve => setTimeout(resolve, 15000)); // 15 seconds, just over an hour for 250 rooms.
-        }
-    }
-    if (noErrors) {
-        console.log("Recording migration complete in account data");
-        await client.setAccountData("org.matrix.policyserv.unstable_to_stable_done", {done: true});
-    }
-    console.log("Migration complete!");
 })();
 
 function formatConfigValue(val: any): string {
