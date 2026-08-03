@@ -109,6 +109,10 @@ export interface CommunityConfig {
     mention_frequency_filter_min_plaintext_length?: number; // whole number
     unsafe_signing_key_filter_enabled?: boolean;
     local_ai_scanner_configs?: LocalAIScannerConfigEntry[];
+    muted_rooms_filter_room_ids?: string[];
+    muted_rooms_filter_allowed_users?: string[];
+    muted_rooms_filter_denied_users?: string[];
+    muted_rooms_filter_use_power_levels?: boolean;
 }
 
 export interface LocalAIScannerConfigEntry {
@@ -410,6 +414,26 @@ export const ConfigDescriptions: Record<string /* user-friendly name */, ConfigD
         property: "local_ai_scanner_configs",
         description: "Configure local AI image scanners for this community. Format: `type:threshold` pairs separated by commas. Available types depend on instance configuration (e.g. nsfw, violence). Example: `nsfw:0.65` or `nsfw:0.65,violence:0.80`. Set to `none` to disable all scanners.",
         transformFn: toScannerConfigs,
+    },
+    "muted_rooms": {
+        property: "muted_rooms_filter_room_ids",
+        description: "The rooms to mute. Every event sent to a muted room is considered spam, which effectively freezes the room. Membership events are never muted, so people can still join and leave. Multiple room IDs can be specified by separating them with commas. Room IDs must match exactly - globs are not supported. Note that muting is invisible to clients: senders get no indication that their events are being rejected.",
+        transformFn: toArray,
+    },
+    "muted_rooms_allowed_globs": {
+        property: "muted_rooms_filter_allowed_users",
+        description: "The globs of users who may still send events to muted rooms. Multiple globs can be specified by separating them with commas. Users who don't match any glob are muted, so leaving this empty mutes everyone except the exemptions below. Example: `@*:example.org`",
+        transformFn: toArray,
+    },
+    "muted_rooms_denied_globs": {
+        property: "muted_rooms_filter_denied_users",
+        description: "The globs of users who may not send events to muted rooms. Multiple globs can be specified by separating them with commas. Overrides the allow list above, but not power levels or the community's moderation bot.",
+        transformFn: toArray,
+    },
+    "muted_rooms_enable_power_levels_trust_source": {
+        property: "muted_rooms_filter_use_power_levels",
+        description: "Allows users with above-default power levels, and room creators in v12+ rooms, to send events to muted rooms even if they match a denied glob. Enabled by default so that moderation bots keep working in muted rooms.",
+        transformFn: toBoolean,
     },
 };
 
